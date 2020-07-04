@@ -5,7 +5,7 @@
 # ------------------------------------------------------------------------------
 
 import os
-
+import random
 import cv2
 import numpy as np
 
@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from .base_dataset import BaseDataset
 
 
-class LIP(BaseDataset):
+class VIPeR(BaseDataset):
     def __init__(self,
                  root,
                  list_path,
@@ -32,7 +32,7 @@ class LIP(BaseDataset):
                  mean=[0.485, 0.456, 0.406],
                  std=[0.229, 0.224, 0.225]):
 
-        super(LIP, self).__init__(ignore_label, base_size,
+        super(VIPeR, self).__init__(ignore_label, base_size,
                                   crop_size, downsample_rate, scale_factor, mean, std)
 
         self.root = root
@@ -52,18 +52,19 @@ class LIP(BaseDataset):
         files = []
         for item in self.img_list:
             if 'train' in self.list_path:
-                image_path, label_path, label_rev_path, _ = item
+                image_path, label_path = item
                 name = os.path.splitext(os.path.basename(label_path))[0]
                 sample = {"img": image_path,
                           "label": label_path,
-                          "label_rev": label_rev_path,
-                          "name": name, }
+                          "name": name,
+                          "split": 'train'}
             elif 'val' in self.list_path:
                 image_path, label_path = item
                 name = os.path.splitext(os.path.basename(label_path))[0]
                 sample = {"img": image_path,
                           "label": label_path,
-                          "name": name, }
+                          "name": name,
+                          "split": 'val'}
             else:
                 raise NotImplementedError('Unknown subset.')
             files.append(sample)
@@ -74,37 +75,57 @@ class LIP(BaseDataset):
         label = cv2.resize(label, size, interpolation=cv2.INTER_NEAREST)
         return image, label
 
+    def gen_sample(self, image, label,
+                   multi_scale=True, is_flip=True, center_crop_test=False):
+        if multi_scale:
+            rand_scale = 1.0 + random.randint(0, self.scale_factor) / 10.0
+            image, label = self.multi_scale_aug(image, label,
+                                                rand_scale=rand_scale)
+
+        if center_crop_test:
+            image, label = self.image_resize(image,
+                                             self.base_size,
+                                             label)
+            image, label = self.center_crop(image, label)
+
+        image = self.input_transform(image)
+        label = self.label_transform(label)
+
+        image = image.transpose((2, 0, 1))
+
+        if is_flip:
+            flip = np.random.choice(2) * 2 - 1
+            image = image[:, :, ::flip]
+            label = label[:, ::flip]
+
+        if self.downsample_rate != 1:
+            label = cv2.resize(label,
+                               None,
+                               fx=self.downsample_rate,
+                               fy=self.downsample_rate,
+                               interpolation=cv2.INTER_NEAREST)
+
+        return image, label
+
     def __getitem__(self, index):
         item = self.files[index]
         name = item["name"]
 
         image = cv2.imread(os.path.join(
-            self.root, 'lip/TrainVal_images/', item["img"]),
+            self.root, 'viper', item["img"]),
             cv2.IMREAD_COLOR)
         label = cv2.imread(os.path.join(
-            self.root, 'lip/TrainVal_parsing_annotations/',
-            item["label"]),
+            self.root, 'viper', item["label"]),
             cv2.IMREAD_GRAYSCALE)
         size = label.shape
-
-        if 'testval' in self.list_path:
-            image = cv2.resize(image, self.crop_size,
-                               interpolation=cv2.INTER_LINEAR)
-            image = self.input_transform(image)
-            image = image.transpose((2, 0, 1))
-
-            return image.copy(), label.copy(), np.array(size), name
 
         if self.flip:
             flip = np.random.choice(2) * 2 - 1
             image = image[:, ::flip, :]
-            if flip == -1:
-                label = cv2.imread(os.path.join(self.root,
-                                                'lip/TrainVal_parsing_annotations/',
-                                                item["label_rev"]),
-                                   cv2.IMREAD_GRAYSCALE)
+            label = label[:, ::flip]
 
-        image, label = self.resize_image(image, label, self.crop_size)
+        image_size = (self.crop_size[1], self.crop_size[0])
+        image, label = self.resize_image(image, label, image_size)
         image, label = self.gen_sample(image, label,
                                        self.multi_scale, False)
 
@@ -116,20 +137,5 @@ class LIP(BaseDataset):
         pred = F.upsample(input=pred,
                           size=(size[-2], size[-1]),
                           mode='bilinear')
-        if flip:
-            flip_img = image.numpy()[:, :, :, ::-1]
-            flip_output = model(torch.from_numpy(flip_img.copy()))
-            flip_output = F.upsample(input=flip_output,
-                                     size=(size[-2], size[-1]),
-                                     mode='bilinear')
-            flip_pred = flip_output.cpu().numpy().copy()
-            flip_pred[:, 14, :, :] = flip_output[:, 15, :, :]
-            flip_pred[:, 15, :, :] = flip_output[:, 14, :, :]
-            flip_pred[:, 16, :, :] = flip_output[:, 17, :, :]
-            flip_pred[:, 17, :, :] = flip_output[:, 16, :, :]
-            flip_pred[:, 18, :, :] = flip_output[:, 19, :, :]
-            flip_pred[:, 19, :, :] = flip_output[:, 18, :, :]
-            flip_pred = torch.from_numpy(flip_pred[:, :, :, ::-1].copy()).cuda()
-            pred += flip_pred
-            pred = pred * 0.5
+        assert flip == False
         return pred.exp()

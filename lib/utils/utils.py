@@ -9,6 +9,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import errno
 import logging
 import time
 from pathlib import Path
@@ -144,3 +145,10 @@ def adjust_learning_rate(optimizer, base_lr, max_iters,
     lr = base_lr*((1-float(cur_iters)/max_iters)**(power))
     optimizer.param_groups[0]['lr'] = lr
     return lr
+
+def mkdir(path):
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise

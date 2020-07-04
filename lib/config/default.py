@@ -1,4 +1,3 @@
-
 # ------------------------------------------------------------------------------
 # Copyright (c) Microsoft
 # Licensed under the MIT License.
@@ -46,11 +45,11 @@ _C.LOSS.CLASS_BALANCE = True
 # DATASET related params
 _C.DATASET = CN()
 _C.DATASET.ROOT = ''
-_C.DATASET.DATASET = 'cityscapes'
-_C.DATASET.NUM_CLASSES = 19
-_C.DATASET.TRAIN_SET = 'list/cityscapes/train.lst'
+_C.DATASET.DATASET = ''
+_C.DATASET.NUM_CLASSES = 10
+_C.DATASET.TRAIN_SET = ''
 _C.DATASET.EXTRA_TRAIN_SET = ''
-_C.DATASET.TEST_SET = 'list/cityscapes/val.lst'
+_C.DATASET.TEST_SET = ''
 
 # training
 _C.TRAIN = CN()
@@ -99,6 +98,7 @@ _C.TEST.FLIP_TEST = False
 _C.TEST.MULTI_SCALE = False
 _C.TEST.CENTER_CROP_TEST = False
 _C.TEST.SCALE_LIST = [1]
+_C.TEST.IGNORE_LABEL = -1
 
 # debug
 _C.DEBUG = CN()

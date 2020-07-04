@@ -104,7 +104,7 @@ class Bottleneck(nn.Module):
 
 class HighResolutionModule(nn.Module):
     def __init__(self, num_branches, blocks, num_blocks, num_inchannels,
-                 num_channels, fuse_method, multi_scale_output=True):
+                 num_channels, fuse_method, multi_scale_output=True, downsample=2):
         super(HighResolutionModule, self).__init__()
         self._check_branches(
             num_branches, blocks, num_blocks, num_inchannels, num_channels)
@@ -114,6 +114,7 @@ class HighResolutionModule(nn.Module):
         self.num_branches = num_branches
 
         self.multi_scale_output = multi_scale_output
+        self.downsample = downsample
 
         self.branches = self._make_branches(
             num_branches, blocks, num_blocks, num_channels)
@@ -196,13 +197,14 @@ class HighResolutionModule(nn.Module):
                     fuse_layer.append(None)
                 else:
                     conv3x3s = []
+                    downsample = self.downsample if i == num_branches - 1 else 2
                     for k in range(i-j):
                         if k == i - j - 1:
                             num_outchannels_conv3x3 = num_inchannels[i]
                             conv3x3s.append(nn.Sequential(
                                 nn.Conv2d(num_inchannels[j],
                                           num_outchannels_conv3x3,
-                                          3, 2, 1, bias=False),
+                                          3, downsample, 1, bias=False),
                                 BatchNorm2d(num_outchannels_conv3x3, 
                                             momentum=BN_MOMENTUM)))
                         else:
@@ -277,7 +279,8 @@ class HighResolutionNet(nn.Module):
         block = blocks_dict[self.stage2_cfg['BLOCK']]
         num_channels = [
             num_channels[i] * block.expansion for i in range(len(num_channels))]
-        self.transition1 = self._make_transition_layer([256], num_channels)
+        downsample = self.stage2_cfg['DOWNSAMPLE']
+        self.transition1 = self._make_transition_layer([256], num_channels, downsample)
         self.stage2, pre_stage_channels = self._make_stage(
             self.stage2_cfg, num_channels)
 
@@ -286,8 +289,9 @@ class HighResolutionNet(nn.Module):
         block = blocks_dict[self.stage3_cfg['BLOCK']]
         num_channels = [
             num_channels[i] * block.expansion for i in range(len(num_channels))]
+        downsample = self.stage3_cfg['DOWNSAMPLE']
         self.transition2 = self._make_transition_layer(
-            pre_stage_channels, num_channels)
+            pre_stage_channels, num_channels, downsample)
         self.stage3, pre_stage_channels = self._make_stage(
             self.stage3_cfg, num_channels)
 
@@ -296,8 +300,9 @@ class HighResolutionNet(nn.Module):
         block = blocks_dict[self.stage4_cfg['BLOCK']]
         num_channels = [
             num_channels[i] * block.expansion for i in range(len(num_channels))]
+        downsample = self.stage4_cfg['DOWNSAMPLE']
         self.transition3 = self._make_transition_layer(
-            pre_stage_channels, num_channels)
+            pre_stage_channels, num_channels, downsample)
         self.stage4, pre_stage_channels = self._make_stage(
             self.stage4_cfg, num_channels, multi_scale_output=True)
         
@@ -321,7 +326,7 @@ class HighResolutionNet(nn.Module):
         )
 
     def _make_transition_layer(
-            self, num_channels_pre_layer, num_channels_cur_layer):
+            self, num_channels_pre_layer, num_channels_cur_layer, downsample=2):
         num_branches_cur = len(num_channels_cur_layer)
         num_branches_pre = len(num_channels_pre_layer)
 
@@ -349,7 +354,7 @@ class HighResolutionNet(nn.Module):
                         if j == i-num_branches_pre else inchannels
                     conv3x3s.append(nn.Sequential(
                         nn.Conv2d(
-                            inchannels, outchannels, 3, 2, 1, bias=False),
+                            inchannels, outchannels, 3, downsample, 1, bias=False),
                         BatchNorm2d(outchannels, momentum=BN_MOMENTUM),
                         nn.ReLU(inplace=True)))
                 transition_layers.append(nn.Sequential(*conv3x3s))
@@ -381,6 +386,7 @@ class HighResolutionNet(nn.Module):
         num_channels = layer_config['NUM_CHANNELS']
         block = blocks_dict[layer_config['BLOCK']]
         fuse_method = layer_config['FUSE_METHOD']
+        downsample = layer_config['DOWNSAMPLE']
 
         modules = []
         for i in range(num_modules):
@@ -391,12 +397,13 @@ class HighResolutionNet(nn.Module):
                 reset_multi_scale_output = True
             modules.append(
                 HighResolutionModule(num_branches,
-                                      block,
-                                      num_blocks,
-                                      num_inchannels,
-                                      num_channels,
-                                      fuse_method,
-                                      reset_multi_scale_output)
+                                     block,
+                                     num_blocks,
+                                     num_inchannels,
+                                     num_channels,
+                                     fuse_method,
+                                     reset_multi_scale_output,
+                                     downsample)
             )
             num_inchannels = modules[-1].get_num_inchannels()
 
@@ -459,11 +466,22 @@ class HighResolutionNet(nn.Module):
             pretrained_dict = torch.load(pretrained)
             logger.info('=> loading pretrained model {}'.format(pretrained))
             model_dict = self.state_dict()
+            # remove 'model' prefix
+            from collections import OrderedDict
+            new_state_dict = OrderedDict()
+            for k, v in pretrained_dict.items():
+                name = k
+                if 'module' in name:
+                    name = name[7:]
+                if 'model' in name:
+                    name = name[6:]
+                new_state_dict[name] = v
+            pretrained_dict = new_state_dict
             pretrained_dict = {k: v for k, v in pretrained_dict.items()
                                if k in model_dict.keys()}
-            #for k, _ in pretrained_dict.items():
-            #    logger.info(
-            #        '=> loading {} pretrained model {}'.format(k, pretrained))
+            for k, _ in pretrained_dict.items():
+               logger.info(
+                   '=> loading {} pretrained model {}'.format(k, pretrained))
             model_dict.update(pretrained_dict)
             self.load_state_dict(model_dict)
 

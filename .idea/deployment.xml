@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData">
+    <serverData>
+      <paths name="zfang29@agave.asu.edu:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/zfang29/zhewang/project/HRNet-Semantic-Segmentation" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
