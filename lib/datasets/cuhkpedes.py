@@ -5,8 +5,7 @@
 # ------------------------------------------------------------------------------
 
 import os
-import glob
-import re
+import json
 import cv2
 import numpy as np
 from PIL import Image
@@ -18,7 +17,7 @@ from .base_dataset import BaseDataset
 from utils.utils import mkdir
 
 
-class CUHK03(BaseDataset):
+class CUHKPedes(BaseDataset):
     def __init__(self,
                  root,
                  list_path=None,
@@ -35,34 +34,20 @@ class CUHK03(BaseDataset):
                  mean=[0.485, 0.456, 0.406],
                  std=[0.229, 0.224, 0.225]):
 
-        super(CUHK03, self).__init__(ignore_label, base_size,
-                                     crop_size, downsample_rate, scale_factor, mean, std)
+        super(CUHKPedes, self).__init__(ignore_label, base_size,
+                                  crop_size, downsample_rate, scale_factor, mean, std)
 
         self.root = root
+        self.num_classes = num_classes
+        self.list_path = os.path.join(self.root, 'cuhk-pedes/annotations/reid_raw.json')
         self.class_weights = None
         self.multi_scale = multi_scale
         self.flip = flip
+        self.files = self.read_files()
 
-        self.train_dir = os.path.join(self.root, 'cuhk03', 'detected', 'bounding_box_train')
-        self.query_dir = os.path.join(self.root, 'cuhk03', 'detected', 'query')
-        self.gallery_dir = os.path.join(self.root, 'cuhk03', 'detected', 'bounding_box_test')
-
-        # self.train_dir = os.path.join(self.root, 'cuhk03', 'labeled', 'bounding_box_train')
-        # self.query_dir = os.path.join(self.root, 'cuhk03', 'labeled', 'query')
-        # self.gallery_dir = os.path.join(self.root, 'cuhk03', 'labeled', 'bounding_box_test')
-
-        self.files = self._process_dir(self.train_dir)
-        # self.query = self._process_dir(self.query_dir)
-        # self.gallery = self._process_dir(self.gallery_dir)
-
-    def _process_dir(self, dir_path):
-        img_paths = glob.glob(os.path.join(dir_path, '*.png'))
-
-        dataset = []
-        for img_path in img_paths:
-            dataset.append(img_path)
-
-        return dataset
+    def read_files(self):
+        files = json.load(open(self.list_path, 'r'))
+        return files
 
     def resize_image(self, image, size):
         image = cv2.resize(image, size, interpolation=cv2.INTER_LINEAR)
@@ -80,9 +65,12 @@ class CUHK03(BaseDataset):
         return image
 
     def __getitem__(self, index):
-        img_path = self.files[index]
-        name = os.path.join(img_path.split('/')[-2], img_path.split('/')[-1])
-        image = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        item = self.files[index]
+        name = item["file_path"]
+
+        image = cv2.imread(os.path.join(
+            self.root, 'cuhk-pedes', 'imgs', name),
+            cv2.IMREAD_COLOR)
         size = image.shape[:-1]
 
         if self.flip:
@@ -206,9 +194,15 @@ class CUHK03(BaseDataset):
             pred = self.remove_small_area(pred)
             pred = self.remove_duplicate_area(pred)
 
+            # import matplotlib.pyplot as plt
+            # plt.imshow(pred, vmin=0, vmax=5)
+            # plt.colorbar()
+            # plt.show()
+
             save_img = Image.fromarray(pred)
             save_img.putpalette(palette)
             dataset_name, file_name = name[i].split('/')
+            file_name = file_name.split('.')[0]
             path = os.path.join(sv_path, dataset_name)
             mkdir(path)
-            save_img.save(os.path.join(path, file_name.replace('.png', '.jpg')))
+            save_img.save(os.path.join(path, file_name+'.png'))

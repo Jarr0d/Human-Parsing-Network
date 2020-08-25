@@ -6,18 +6,15 @@ CUDNN:
 GPUS: (0, )
 OUTPUT_DIR: 'output'
 LOG_DIR: 'log'
-WORKERS: 4
-PRINT_FREQ: 1
+WORKERS: 2
+PRINT_FREQ: 20
 
 DATASET:
-  DATASET: mhp
+  DATASET: cuhkpedes
   ROOT: 'data/'
-  TEST_SET: 'list/mhp/valList.txt'
-  TRAIN_SET: 'list/mhp/trainList.txt'
-  NUM_CLASSES: 7
+  NUM_CLASSES: 10
 MODEL:
   NAME: seg_hrnet
-  PRETRAINED: 'pretrained_models/hrnetv2_w48_imagenet_pretrained.pth'
   EXTRA:
     FINAL_CONV_KERNEL: 1
     STAGE1:
@@ -40,6 +37,7 @@ MODEL:
       - 48
       - 96
       FUSE_METHOD: SUM
+      DOWNSAMPLE: 2
     STAGE3:
       NUM_MODULES: 4
       NUM_BRANCHES: 3
@@ -53,6 +51,7 @@ MODEL:
       - 96
       - 192
       FUSE_METHOD: SUM
+      DOWNSAMPLE: 2
     STAGE4:
       NUM_MODULES: 3
       NUM_BRANCHES: 4
@@ -68,37 +67,15 @@ MODEL:
       - 192
       - 384
       FUSE_METHOD: SUM
-LOSS:
-  USE_OHEM: false
-  OHEMTHRES: 0.9
-  OHEMKEEP: 131072
-TRAIN:
-  IMAGE_SIZE:
-  - 382
-  - 512
-  BASE_SIZE: 512
-  BATCH_SIZE_PER_GPU: 6
-  SHUFFLE: true
-  BEGIN_EPOCH: 0
-  END_EPOCH: 150
-  RESUME: true
-  OPTIMIZER: sgd
-  LR: 0.007
-  WD: 0.0005
-  MOMENTUM: 0.9
-  NESTEROV: false
-  FLIP: true
-  MULTI_SCALE: true
-  DOWNSAMPLERATE: 1
-  IGNORE_LABEL: 255
-  SCALE_FACTOR: 11
+      DOWNSAMPLE: 1
 TEST:
   IMAGE_SIZE:
-  - 382
-  - 512
-  BASE_SIZE: 512
+  - 128
+  - 384
+  BASE_SIZE: 384
   BATCH_SIZE_PER_GPU: 8
   NUM_SAMPLES: 2000
   FLIP_TEST: false
   MULTI_SCALE: false
   IGNORE_LABEL: 255
+  MODEL_FILE: 'pretrained_models/best.pth'
